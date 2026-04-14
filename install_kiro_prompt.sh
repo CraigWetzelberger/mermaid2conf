@@ -52,7 +52,7 @@ Publish a markdown document to a specific section of a Confluence page, renderin
 
 5. Run the publish script with the page ID and section heading:
    \`\`\`
-   python3 $SCRIPT_DIR/kiro-publish-to-confluence.py <page_id> "<confluence_section>"
+   uv run --project "$SCRIPT_DIR" kiro-publish-to-confluence <page_id> "<confluence_section>" "$SCRIPT_DIR/output" --config "$CONFIG_FILE"
    \`\`\`
 
 6. Report the page URL printed by the publish script when done.

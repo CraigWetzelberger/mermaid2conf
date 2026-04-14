@@ -1,0 +1,25 @@
+[project]
+requires-python = ">= 3.12"
+name = "markdown-to-confluence"
+authors = [{ name = "Craig Wetzelberger" }]
+version = "1"
+readme = "README.md"
+dependencies = [
+    "mistune>=3.2.0",
+    "requests>=2.33.1",
+]
+
+[project.scripts]
+kiro-publish-processing = "markdown_to_confluence.processing:main"
+kiro-publish-to-confluence = "markdown_to_confluence.publish:main"
+md2conf-mermaid = "markdown_to_confluence.mermaid:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+environments = [
+  "sys_platform == 'darwin'",
+  "sys_platform == 'linux'",
+]
