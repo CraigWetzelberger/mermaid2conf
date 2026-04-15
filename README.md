@@ -2,6 +2,12 @@
 
 Tools for publishing markdown documents with mermaid diagrams to Confluence.
 
+## Skill
+
+```shell
+npx skills add bholland-bh/mermaid2conf --global --skill '*' --agent kiro-cli --agent codex
+```
+
 ## Prerequisites
 
 - Python 3.12+
