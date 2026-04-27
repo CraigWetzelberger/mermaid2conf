@@ -18,7 +18,7 @@ from .compat import warn_legacy_command
 CONFIG_FILENAME = "confluence_config.json"
 DEFAULT_CONFIG_LOCATIONS = (
     Path.cwd() / CONFIG_FILENAME,
-    Path.home() / ".config" / "markdown-to-confluence" / CONFIG_FILENAME,
+    Path.home() / ".config" / "mermaid2conf" / CONFIG_FILENAME,
 )
 
 

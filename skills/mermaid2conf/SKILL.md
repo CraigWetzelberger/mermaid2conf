@@ -4,7 +4,7 @@ description: Use this skill to publish markdown documents with mermaid diagrams 
 compatibility: Requires Python 3.12+, uv, and mermaid-cli
 ---
 
-# Markdown To Confluence
+# Converts Markdown To Confluence with Mermaid documents automatically converting to an image. 
 
 ## Pre-Requisites
 
@@ -35,10 +35,10 @@ compatibility: Requires Python 3.12+, uv, and mermaid-cli
 3. Confirm confluence configuration exists
 
    ```shell
-   [ -f ~/.config/markdown-to-confluence/confluence_config.json ] && echo "Exists" || echo "Does not exist" 
+   [ -f ~/.config/mermaid2conf/confluence_config.json ] && echo "Exists" || echo "Does not exist" 
    ```
 
-   If Confluence Configuration file does not exist, direct user to visit [Configure Confluence Credentials](https://github.com/CraigWetzelberger/markdown-to-confluence#configure-confluence-credentials) and terminate
+   If Confluence Configuration file does not exist, direct user to visit [Configure Confluence Credentials](https://github.com/CraigWetzelberger/mermaid2conf#configure-confluence-credentials) and terminate
 
 ## Inputs
 
