@@ -107,12 +107,21 @@ def check_auth(session: requests.Session, api: str, config_path: Path) -> None:
 def upload_attachments(
     session: requests.Session, api: str, page_id: str, output_dir: Path
 ) -> None:
-    for png_path in sorted(output_dir.glob("*.png")):
+    mime_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+    }
+    for png_path in sorted(
+        p for ext in ("*.png", "*.jpg", "*.jpeg", "*.gif") for p in output_dir.glob(ext)
+    ):
         print(f"Uploading: {png_path.name}")
+        mime = mime_types.get(png_path.suffix.lower(), "application/octet-stream")
         with png_path.open("rb") as handle:
             response = session.post(
                 f"{api}/content/{page_id}/child/attachment",
-                files={"file": (png_path.name, handle, "image/png")},
+                files={"file": (png_path.name, handle, mime)},
                 data={"minorEdit": "true"},
             )
 
@@ -133,7 +142,7 @@ def upload_attachments(
         with png_path.open("rb") as handle:
             update_response = session.post(
                 f"{api}/content/{page_id}/child/attachment/{attachment_id}/data",
-                files={"file": (png_path.name, handle, "image/png")},
+                files={"file": (png_path.name, handle, mime)},
                 data={"minorEdit": "true"},
             )
         print(f"  Updated (HTTP {update_response.status_code})")
@@ -143,7 +152,7 @@ def md_to_confluence_html(md_path: Path) -> str:
     content = md_path.read_text()
     content = re.sub(r"^---\n.*?\n---\n", "", content, count=1, flags=re.DOTALL)
     content = re.sub(
-        r"!\[Mermaid Diagram\]\(([^)]+\.png)\)",
+        r"!\[[^\]]*\]\(([^)]+\.(?:png|jpe?g|gif))\)",
         lambda match: f"ACIMG|||{match.group(1)}|||ENDACIMG",
         content,
     )

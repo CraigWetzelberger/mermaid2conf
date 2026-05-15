@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,6 +57,8 @@ def convert_markdown(input_file: Path, output_dir: Path) -> Path:
     content = input_file.read_text()
     blocks = extract_mermaid_blocks(content)
 
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for index, (block, title) in enumerate(blocks):
@@ -65,6 +68,19 @@ def convert_markdown(input_file: Path, output_dir: Path) -> Path:
         content = content.replace(
             f"```mermaid\n{block}```", f"![Mermaid Diagram]({image_name})", 1
         )
+
+    for match in re.finditer(r"!\[([^\]]*)\]\(([^)]+)\)", content):
+        alt, img_ref = match.group(1), match.group(2)
+        src = (input_file.parent / img_ref).resolve()
+        if src.is_file() and src.suffix.lower() in (
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+        ):
+            shutil.copy2(src, output_dir / src.name)
+            content = content.replace(match.group(0), f"![{alt}]({src.name})")
 
     output_file = output_dir / input_file.name
     output_file.write_text(content)
