@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 from .compat import warn_legacy_command
+from .spec_links import resolve_spec_links
 
 
 def slugify(text: str) -> str:
@@ -55,6 +56,7 @@ def render_mermaid(code: str, output_path: Path) -> None:
 
 def convert_markdown(input_file: Path, output_dir: Path) -> Path:
     content = input_file.read_text()
+    content = resolve_spec_links(content, input_file)
     blocks = extract_mermaid_blocks(content)
 
     if output_dir.exists():

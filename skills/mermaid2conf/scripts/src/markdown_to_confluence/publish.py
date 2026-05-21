@@ -14,6 +14,7 @@ import mistune
 import requests
 
 from .compat import warn_legacy_command
+from .diff_sections import diff_sections, merge_incremental, preserve_image_markup
 
 CONFIG_FILENAME = "confluence_config.json"
 DEFAULT_CONFIG_LOCATIONS = (
@@ -113,39 +114,42 @@ def upload_attachments(
         ".jpeg": "image/jpeg",
         ".gif": "image/gif",
     }
-    for png_path in sorted(
+    # Fetch existing attachments with their sizes
+    existing: dict[str, tuple[str, int]] = {}  # filename -> (id, size)
+    resp = session.get(f"{api}/content/{page_id}/child/attachment", params={"limit": 200})
+    if resp.status_code == 200:
+        for att in resp.json().get("results", []):
+            ext = att.get("extensions", {})
+            existing[att["title"]] = (att["id"], ext.get("fileSize", -1))
+
+    for img_path in sorted(
         p for ext in ("*.png", "*.jpg", "*.jpeg", "*.gif") for p in output_dir.glob(ext)
     ):
-        print(f"Uploading: {png_path.name}")
-        mime = mime_types.get(png_path.suffix.lower(), "application/octet-stream")
-        with png_path.open("rb") as handle:
-            response = session.post(
-                f"{api}/content/{page_id}/child/attachment",
-                files={"file": (png_path.name, handle, mime)},
-                data={"minorEdit": "true"},
+        local_size = img_path.stat().st_size
+        mime = mime_types.get(img_path.suffix.lower(), "application/octet-stream")
+
+        if img_path.name in existing:
+            att_id, remote_size = existing[img_path.name]
+            if local_size == remote_size:
+                print(f"  Skipped (unchanged, {local_size} bytes): {img_path.name}")
+                continue
+            print(
+                f"  Updating ({local_size} vs {remote_size} bytes): {img_path.name}"
             )
-
-        if response.status_code == 200:
-            print("  Created")
-            continue
-
-        attachment_response = session.get(
-            f"{api}/content/{page_id}/child/attachment",
-            params={"filename": png_path.name},
-        )
-        results = attachment_response.json().get("results", [])
-        if not results:
-            print(f"  WARNING: Could not upload {png_path.name}")
-            continue
-
-        attachment_id = results[0]["id"]
-        with png_path.open("rb") as handle:
-            update_response = session.post(
-                f"{api}/content/{page_id}/child/attachment/{attachment_id}/data",
-                files={"file": (png_path.name, handle, mime)},
-                data={"minorEdit": "true"},
-            )
-        print(f"  Updated (HTTP {update_response.status_code})")
+            with img_path.open("rb") as handle:
+                session.post(
+                    f"{api}/content/{page_id}/child/attachment/{att_id}/data",
+                    files={"file": (img_path.name, handle, mime)},
+                    data={"minorEdit": "true"},
+                )
+        else:
+            print(f"  Uploading (new): {img_path.name}")
+            with img_path.open("rb") as handle:
+                session.post(
+                    f"{api}/content/{page_id}/child/attachment",
+                    files={"file": (img_path.name, handle, mime)},
+                    data={"minorEdit": "true"},
+                )
 
 
 def md_to_confluence_html(md_path: Path) -> str:
@@ -190,29 +194,18 @@ def md_to_confluence_html(md_path: Path) -> str:
     )
 
 
-def merge_section(current: str, section: str, new_html: str) -> str:
+def _extract_h1_section(page_html: str, section: str) -> tuple[str | None, int, int]:
+    """Extract the content of a specific h1 section. Returns (content, start, end)."""
     heading_pattern = re.compile(r"<h1[^>]*>", re.IGNORECASE)
-    positions = [match.start() for match in heading_pattern.finditer(current)]
-    target_index = None
-    for index, position in enumerate(positions):
-        end_h1 = current.index("</h1>", position) + 5
-        heading_text = re.sub(r"<[^>]+>", "", current[position:end_h1]).strip()
+    positions = [m.start() for m in heading_pattern.finditer(page_html)]
+    for i, pos in enumerate(positions):
+        end_h1 = page_html.index("</h1>", pos) + 5
+        heading_text = re.sub(r"<[^>]+>", "", page_html[pos:end_h1]).strip()
         if heading_text.lower() == section.lower().strip():
-            target_index = index
-            break
-
-    if target_index is not None:
-        start = positions[target_index]
-        end = (
-            positions[target_index + 1]
-            if target_index + 1 < len(positions)
-            else len(current)
-        )
-        return current[:start] + new_html + current[end:]
-    sys.exit(
-        f"ERROR: Section heading '{section}' not found on the page.\n"
-        "Add the heading to the page where you want this section, then try again."
-    )
+            start = pos
+            end = positions[i + 1] if i + 1 < len(positions) else len(page_html)
+            return page_html[start:end], start, end
+    return None, 0, 0
 
 
 def publish(
@@ -223,7 +216,51 @@ def publish(
     )
     response.raise_for_status()
     page = response.json()
-    merged = merge_section(page["body"]["storage"]["value"], section, new_html)
+    page_html = page["body"]["storage"]["value"]
+
+    pub_section, sec_start, sec_end = _extract_h1_section(page_html, section)
+
+    if pub_section is None:
+        print(f"\n⚠️  Section '{section}' not found on the page.")
+        print("This will be a COMPLETE NEW SECTION appended to the page.")
+        answer = input("Proceed? [y/N] ").strip().lower()
+        if answer != "y":
+            print("Aborted.")
+            return
+        merged = page_html + new_html
+    else:
+        diff = diff_sections(new_html, pub_section)
+
+        if diff.is_full_replacement:
+            print(f"\n⚠️  Complete replacement of section '{section}'.")
+            print("No matching sub-sections found between local and published.")
+            answer = input("Proceed with full replacement? [y/N] ").strip().lower()
+            if answer != "y":
+                print("Aborted.")
+                return
+            new_html = preserve_image_markup(new_html, pub_section)
+            merged = page_html[:sec_start] + new_html + page_html[sec_end:]
+        else:
+            # Check if published section has raw <img> tags that need fixing
+            has_broken_images = bool(re.search(r"<img\s", pub_section))
+
+            if not diff.changed and not has_broken_images:
+                print("\n✓ No changes detected — page is up to date.")
+                return
+            if not diff.changed and has_broken_images:
+                print("\n🔧 Fixing broken image markup (no content changes).")
+                merged = page_html[:sec_start] + new_html + page_html[sec_end:]
+            else:
+                print("\n📝 Incremental update:")
+                for title in diff.changed:
+                    print(f"  ↻ Updated: {title}")
+                for title in diff.unchanged:
+                    print(f"  ✓ Unchanged: {title}")
+                updated_section = merge_incremental(
+                    pub_section, new_html, diff.changed
+                )
+                updated_section = preserve_image_markup(updated_section, pub_section)
+                merged = page_html[:sec_start] + updated_section + page_html[sec_end:]
 
     update_response = session.put(
         f"{api}/content/{page_id}",

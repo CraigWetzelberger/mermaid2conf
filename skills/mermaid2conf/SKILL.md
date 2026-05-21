@@ -8,6 +8,14 @@ compatibility: Requires Python 3.12+, uv, and mermaid-cli
 
 ## Pre-Requisites
 
+Run this single check. If it prints "READY", skip to the Inputs section immediately — do NOT run the individual checks below.
+
+```shell
+command -v uv >/dev/null && command -v mmdc >/dev/null && [ -f ~/.config/mermaid2conf/confluence_config.json ] && echo "READY" || echo "SETUP NEEDED"
+```
+
+Only if the output is "SETUP NEEDED", run these individual checks:
+
 1. Confirm `uv` is installed
 
    ```shell
@@ -23,10 +31,10 @@ compatibility: Requires Python 3.12+, uv, and mermaid-cli
 2. Confirm `mermaid-cli` is installed
 
    ```shell
-   npm list -g @mermaid-js/mermaid-cli || echo "NOT INSTALLED" 
+   command -v "mmdc" || echo "NOT INSTALLED"
    ```
 
-   If `mermaid-cli` is not installed prompt for approval to install `uv`
+   If `mmdc` is not installed prompt for approval to install mermaid-cli
 
    ```shell
    npm install -g @mermaid-js/mermaid-cli
@@ -35,7 +43,7 @@ compatibility: Requires Python 3.12+, uv, and mermaid-cli
 3. Confirm confluence configuration exists
 
    ```shell
-   [ -f ~/.config/mermaid2conf/confluence_config.json ] && echo "Exists" || echo "Does not exist" 
+   [ -f ~/.config/mermaid2conf/confluence_config.json ] && echo "Exists" || echo "Does not exist"
    ```
 
    If Confluence Configuration file does not exist, direct user to visit [Configure Confluence Credentials](https://github.com/CraigWetzelberger/mermaid2conf#configure-confluence-credentials) and terminate
